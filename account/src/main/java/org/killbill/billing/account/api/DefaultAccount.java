@@ -28,6 +28,7 @@ import org.killbill.billing.account.dao.AccountModelDao;
 import org.killbill.billing.catalog.api.Currency;
 import org.killbill.billing.entity.EntityBase;
 import org.killbill.billing.util.account.AccountDateTimeUtils;
+import org.killbill.billing.util.entity.Entity;
 
 import static org.killbill.billing.account.api.DefaultMutableAccountData.DEFAULT_BILLING_CYCLE_DAY_LOCAL;
 
@@ -63,29 +64,7 @@ public class DefaultAccount extends EntityBase implements Account {
      * @param data AccountData new data for the existing account
      */
     public DefaultAccount(final UUID id, final AccountData data) {
-        this(id,
-             data.getExternalKey(),
-             data.getEmail(),
-             data.getName(),
-             data.getFirstNameLength(),
-             data.getCurrency(),
-             data.getParentAccountId(),
-             data.isPaymentDelegatedToParent(),
-             data.getBillCycleDayLocal(),
-             data.getPaymentMethodId(),
-             data.getReferenceTime(),
-             data.getTimeZone(),
-             data.getLocale(),
-             data.getAddress1(),
-             data.getAddress2(),
-             data.getCompanyName(),
-             data.getCity(),
-             data.getStateOrProvince(),
-             data.getCountry(),
-             data.getPostalCode(),
-             data.getPhone(),
-             data.getNotes(),
-             data.isMigrated());
+        this(new Builder(data).id(id).createdDate(null).updatedDate(null));
     }
 
     // This call is used for testing and update from an existing account
@@ -98,31 +77,30 @@ public class DefaultAccount extends EntityBase implements Account {
                           final String city, final String stateOrProvince, final String country,
                           final String postalCode, final String phone, final String notes,
                           final Boolean isMigrated) {
-        this(id,
-             null,
-             null,
-             externalKey,
-             email,
-             name,
-             firstNameLength,
-             currency,
-             parentAccountId,
-             isPaymentDelegatedToParent,
-             billCycleDayLocal,
-             paymentMethodId,
-             referenceTime,
-             timeZone,
-             locale,
-             address1,
-             address2,
-             companyName,
-             city,
-             stateOrProvince,
-             country,
-             postalCode,
-             phone,
-             notes,
-             isMigrated);
+        this(new Builder()
+                     .id(id)
+                     .externalKey(externalKey)
+                     .email(email)
+                     .name(name)
+                     .firstNameLength(firstNameLength)
+                     .currency(currency)
+                     .parentAccountId(parentAccountId)
+                     .isPaymentDelegatedToParent(isPaymentDelegatedToParent)
+                     .billCycleDayLocal(billCycleDayLocal)
+                     .paymentMethodId(paymentMethodId)
+                     .referenceTime(referenceTime)
+                     .timeZone(timeZone)
+                     .locale(locale)
+                     .address1(address1)
+                     .address2(address2)
+                     .companyName(companyName)
+                     .city(city)
+                     .stateOrProvince(stateOrProvince)
+                     .country(country)
+                     .postalCode(postalCode)
+                     .phone(phone)
+                     .notes(notes)
+                     .isMigrated(isMigrated));
     }
 
     public DefaultAccount(final UUID id, @Nullable final DateTime createdDate, @Nullable final DateTime updatedDate,
@@ -135,57 +113,306 @@ public class DefaultAccount extends EntityBase implements Account {
                           final String city, final String stateOrProvince, final String country,
                           final String postalCode, final String phone, final String notes,
                           final Boolean isMigrated) {
-        super(id, createdDate, updatedDate);
-        this.externalKey = externalKey;
-        this.email = email;
-        this.name = name;
-        this.firstNameLength = firstNameLength;
-        this.currency = currency;
-        this.parentAccountId = parentAccountId;
-        this.isPaymentDelegatedToParent = isPaymentDelegatedToParent != null ? isPaymentDelegatedToParent : false;
-        this.billCycleDayLocal = billCycleDayLocal == null ? (Integer) DEFAULT_BILLING_CYCLE_DAY_LOCAL : billCycleDayLocal;
-        this.paymentMethodId = paymentMethodId;
-        this.referenceTime = referenceTime;
-        this.timeZone = timeZone;
-        this.locale = locale;
-        this.address1 = address1;
-        this.address2 = address2;
-        this.companyName = companyName;
-        this.city = city;
-        this.stateOrProvince = stateOrProvince;
-        this.postalCode = postalCode;
-        this.country = country;
-        this.phone = phone;
-        this.notes = notes;
-        this.isMigrated = isMigrated;
+        this(new Builder()
+                     .id(id)
+                     .createdDate(createdDate)
+                     .updatedDate(updatedDate)
+                     .externalKey(externalKey)
+                     .email(email)
+                     .name(name)
+                     .firstNameLength(firstNameLength)
+                     .currency(currency)
+                     .parentAccountId(parentAccountId)
+                     .isPaymentDelegatedToParent(isPaymentDelegatedToParent)
+                     .billCycleDayLocal(billCycleDayLocal)
+                     .paymentMethodId(paymentMethodId)
+                     .referenceTime(referenceTime)
+                     .timeZone(timeZone)
+                     .locale(locale)
+                     .address1(address1)
+                     .address2(address2)
+                     .companyName(companyName)
+                     .city(city)
+                     .stateOrProvince(stateOrProvince)
+                     .country(country)
+                     .postalCode(postalCode)
+                     .phone(phone)
+                     .notes(notes)
+                     .isMigrated(isMigrated));
     }
 
     public DefaultAccount(final AccountModelDao accountModelDao) {
-        this(accountModelDao.getId(),
-             accountModelDao.getCreatedDate(),
-             accountModelDao.getUpdatedDate(),
-             accountModelDao.getExternalKey(),
-             accountModelDao.getEmail(),
-             accountModelDao.getName(),
-             accountModelDao.getFirstNameLength(),
-             accountModelDao.getCurrency(),
-             accountModelDao.getParentAccountId(),
-             accountModelDao.getIsPaymentDelegatedToParent(),
-             accountModelDao.getBillingCycleDayLocal(),
-             accountModelDao.getPaymentMethodId(),
-             accountModelDao.getReferenceTime(),
-             accountModelDao.getTimeZone(),
-             accountModelDao.getLocale(),
-             accountModelDao.getAddress1(),
-             accountModelDao.getAddress2(),
-             accountModelDao.getCompanyName(),
-             accountModelDao.getCity(),
-             accountModelDao.getStateOrProvince(),
-             accountModelDao.getCountry(),
-             accountModelDao.getPostalCode(),
-             accountModelDao.getPhone(),
-             accountModelDao.getNotes(),
-             accountModelDao.getMigrated());
+        this(new Builder(accountModelDao));
+    }
+
+    public DefaultAccount(final Builder builder) {
+        super(builder.id, builder.createdDate, builder.updatedDate);
+        this.externalKey = builder.externalKey;
+        this.email = builder.email;
+        this.name = builder.name;
+        this.firstNameLength = builder.firstNameLength;
+        this.currency = builder.currency;
+        this.parentAccountId = builder.parentAccountId;
+        this.isPaymentDelegatedToParent = builder.isPaymentDelegatedToParent != null ? builder.isPaymentDelegatedToParent : false;
+        this.billCycleDayLocal = builder.billCycleDayLocal == null ? (Integer) DEFAULT_BILLING_CYCLE_DAY_LOCAL : builder.billCycleDayLocal;
+        this.paymentMethodId = builder.paymentMethodId;
+        this.referenceTime = builder.referenceTime;
+        this.timeZone = builder.timeZone;
+        this.locale = builder.locale;
+        this.address1 = builder.address1;
+        this.address2 = builder.address2;
+        this.companyName = builder.companyName;
+        this.city = builder.city;
+        this.stateOrProvince = builder.stateOrProvince;
+        this.postalCode = builder.postalCode;
+        this.country = builder.country;
+        this.phone = builder.phone;
+        this.notes = builder.notes;
+        this.isMigrated = builder.isMigrated;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public Builder toBuilder() {
+        return new Builder(this);
+    }
+
+    public static class Builder {
+
+        private UUID id;
+        private DateTime createdDate;
+        private DateTime updatedDate;
+        private String externalKey;
+        private String email;
+        private String name;
+        private Integer firstNameLength;
+        private Currency currency;
+        private UUID parentAccountId;
+        private Boolean isPaymentDelegatedToParent;
+        private Integer billCycleDayLocal;
+        private UUID paymentMethodId;
+        private DateTime referenceTime;
+        private DateTimeZone timeZone;
+        private String locale;
+        private String address1;
+        private String address2;
+        private String companyName;
+        private String city;
+        private String stateOrProvince;
+        private String country;
+        private String postalCode;
+        private String phone;
+        private String notes;
+        private Boolean isMigrated;
+
+        public Builder() {
+        }
+
+        public Builder(final UUID id) {
+            this.id = id;
+        }
+
+        public Builder(final AccountData data) {
+            if (data != null) {
+                this.externalKey = data.getExternalKey();
+                this.email = data.getEmail();
+                this.name = data.getName();
+                this.firstNameLength = data.getFirstNameLength();
+                this.currency = data.getCurrency();
+                this.parentAccountId = data.getParentAccountId();
+                this.isPaymentDelegatedToParent = data.isPaymentDelegatedToParent();
+                this.billCycleDayLocal = data.getBillCycleDayLocal();
+                this.paymentMethodId = data.getPaymentMethodId();
+                this.referenceTime = data.getReferenceTime();
+                this.timeZone = data.getTimeZone();
+                this.locale = data.getLocale();
+                this.address1 = data.getAddress1();
+                this.address2 = data.getAddress2();
+                this.companyName = data.getCompanyName();
+                this.city = data.getCity();
+                this.stateOrProvince = data.getStateOrProvince();
+                this.country = data.getCountry();
+                this.postalCode = data.getPostalCode();
+                this.phone = data.getPhone();
+                this.notes = data.getNotes();
+                this.isMigrated = data.isMigrated();
+            }
+        }
+
+        public Builder(final UUID id, final AccountData data) {
+            this(data);
+            this.id = id;
+        }
+
+        public Builder(final Account account) {
+            this((AccountData) account);
+            if (account != null) {
+                this.id = account.getId();
+                this.createdDate = account.getCreatedDate();
+                this.updatedDate = account.getUpdatedDate();
+            }
+        }
+
+        public Builder(final AccountModelDao accountModelDao) {
+            if (accountModelDao != null) {
+                this.id = accountModelDao.getId();
+                this.createdDate = accountModelDao.getCreatedDate();
+                this.updatedDate = accountModelDao.getUpdatedDate();
+                this.externalKey = accountModelDao.getExternalKey();
+                this.email = accountModelDao.getEmail();
+                this.name = accountModelDao.getName();
+                this.firstNameLength = accountModelDao.getFirstNameLength();
+                this.currency = accountModelDao.getCurrency();
+                this.parentAccountId = accountModelDao.getParentAccountId();
+                this.isPaymentDelegatedToParent = accountModelDao.getIsPaymentDelegatedToParent();
+                this.billCycleDayLocal = accountModelDao.getBillingCycleDayLocal();
+                this.paymentMethodId = accountModelDao.getPaymentMethodId();
+                this.referenceTime = accountModelDao.getReferenceTime();
+                this.timeZone = accountModelDao.getTimeZone();
+                this.locale = accountModelDao.getLocale();
+                this.address1 = accountModelDao.getAddress1();
+                this.address2 = accountModelDao.getAddress2();
+                this.companyName = accountModelDao.getCompanyName();
+                this.city = accountModelDao.getCity();
+                this.stateOrProvince = accountModelDao.getStateOrProvince();
+                this.country = accountModelDao.getCountry();
+                this.postalCode = accountModelDao.getPostalCode();
+                this.phone = accountModelDao.getPhone();
+                this.notes = accountModelDao.getNotes();
+                this.isMigrated = accountModelDao.getMigrated();
+            }
+        }
+
+        public Builder id(final UUID id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder createdDate(final DateTime createdDate) {
+            this.createdDate = createdDate;
+            return this;
+        }
+
+        public Builder updatedDate(final DateTime updatedDate) {
+            this.updatedDate = updatedDate;
+            return this;
+        }
+
+        public Builder externalKey(final String externalKey) {
+            this.externalKey = externalKey;
+            return this;
+        }
+
+        public Builder email(final String email) {
+            this.email = email;
+            return this;
+        }
+
+        public Builder name(final String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder firstNameLength(final Integer firstNameLength) {
+            this.firstNameLength = firstNameLength;
+            return this;
+        }
+
+        public Builder currency(final Currency currency) {
+            this.currency = currency;
+            return this;
+        }
+
+        public Builder parentAccountId(final UUID parentAccountId) {
+            this.parentAccountId = parentAccountId;
+            return this;
+        }
+
+        public Builder isPaymentDelegatedToParent(final Boolean isPaymentDelegatedToParent) {
+            this.isPaymentDelegatedToParent = isPaymentDelegatedToParent;
+            return this;
+        }
+
+        public Builder billCycleDayLocal(final Integer billCycleDayLocal) {
+            this.billCycleDayLocal = billCycleDayLocal;
+            return this;
+        }
+
+        public Builder paymentMethodId(final UUID paymentMethodId) {
+            this.paymentMethodId = paymentMethodId;
+            return this;
+        }
+
+        public Builder referenceTime(final DateTime referenceTime) {
+            this.referenceTime = referenceTime;
+            return this;
+        }
+
+        public Builder timeZone(final DateTimeZone timeZone) {
+            this.timeZone = timeZone;
+            return this;
+        }
+
+        public Builder locale(final String locale) {
+            this.locale = locale;
+            return this;
+        }
+
+        public Builder address1(final String address1) {
+            this.address1 = address1;
+            return this;
+        }
+
+        public Builder address2(final String address2) {
+            this.address2 = address2;
+            return this;
+        }
+
+        public Builder companyName(final String companyName) {
+            this.companyName = companyName;
+            return this;
+        }
+
+        public Builder city(final String city) {
+            this.city = city;
+            return this;
+        }
+
+        public Builder stateOrProvince(final String stateOrProvince) {
+            this.stateOrProvince = stateOrProvince;
+            return this;
+        }
+
+        public Builder country(final String country) {
+            this.country = country;
+            return this;
+        }
+
+        public Builder postalCode(final String postalCode) {
+            this.postalCode = postalCode;
+            return this;
+        }
+
+        public Builder phone(final String phone) {
+            this.phone = phone;
+            return this;
+        }
+
+        public Builder notes(final String notes) {
+            this.notes = notes;
+            return this;
+        }
+
+        public Builder isMigrated(final Boolean isMigrated) {
+            this.isMigrated = isMigrated;
+            return this;
+        }
+
+        public DefaultAccount build() {
+            return new DefaultAccount(this);
+        }
     }
 
     @Override

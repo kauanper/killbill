@@ -20,6 +20,7 @@ package org.killbill.billing.account.api;
 
 import java.util.UUID;
 
+import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.killbill.billing.account.AccountTestSuiteNoDB;
 import org.killbill.billing.catalog.api.Currency;
@@ -131,6 +132,171 @@ public class TestDefaultAccount extends AccountTestSuiteNoDB {
         } catch (final IllegalArgumentException e) {
             Assert.assertTrue(true);
         }
+    }
+
+    @Test(groups = "fast", description = "Test DefaultAccount.Builder fluent creation")
+    public void testBuilderCreationAndFluentSetters() throws Exception {
+        final UUID id = UUID.randomUUID();
+        final DateTime createdDate = new DateTime(2023, 1, 1, 0, 0, DateTimeZone.UTC);
+        final DateTime updatedDate = new DateTime(2023, 1, 2, 0, 0, DateTimeZone.UTC);
+        final UUID parentAccountId = UUID.randomUUID();
+        final UUID paymentMethodId = UUID.randomUUID();
+        final DateTime referenceTime = new DateTime(2023, 1, 3, 0, 0, DateTimeZone.UTC);
+        final DateTimeZone timeZone = DateTimeZone.forID("America/New_York");
+
+        final DefaultAccount account = DefaultAccount.builder()
+                .id(id)
+                .createdDate(createdDate)
+                .updatedDate(updatedDate)
+                .externalKey("ext-123")
+                .email("test@example.com")
+                .name("John Doe")
+                .firstNameLength(4)
+                .currency(Currency.USD)
+                .parentAccountId(parentAccountId)
+                .isPaymentDelegatedToParent(true)
+                .billCycleDayLocal(15)
+                .paymentMethodId(paymentMethodId)
+                .referenceTime(referenceTime)
+                .timeZone(timeZone)
+                .locale("en_US")
+                .address1("123 Main St")
+                .address2("Apt 4B")
+                .companyName("Acme Corp")
+                .city("San Francisco")
+                .stateOrProvince("CA")
+                .country("USA")
+                .postalCode("94105")
+                .phone("555-1234")
+                .notes("VIP customer")
+                .isMigrated(true)
+                .build();
+
+        Assert.assertEquals(account.getId(), id);
+        Assert.assertEquals(account.getCreatedDate(), createdDate);
+        Assert.assertEquals(account.getUpdatedDate(), updatedDate);
+        Assert.assertEquals(account.getExternalKey(), "ext-123");
+        Assert.assertEquals(account.getEmail(), "test@example.com");
+        Assert.assertEquals(account.getName(), "John Doe");
+        Assert.assertEquals(account.getFirstNameLength(), (Integer) 4);
+        Assert.assertEquals(account.getCurrency(), Currency.USD);
+        Assert.assertEquals(account.getParentAccountId(), parentAccountId);
+        Assert.assertTrue(account.isPaymentDelegatedToParent());
+        Assert.assertEquals(account.getBillCycleDayLocal(), (Integer) 15);
+        Assert.assertEquals(account.getPaymentMethodId(), paymentMethodId);
+        Assert.assertEquals(account.getReferenceTime(), referenceTime);
+        Assert.assertEquals(account.getTimeZone(), timeZone);
+        Assert.assertEquals(account.getLocale(), "en_US");
+        Assert.assertEquals(account.getAddress1(), "123 Main St");
+        Assert.assertEquals(account.getAddress2(), "Apt 4B");
+        Assert.assertEquals(account.getCompanyName(), "Acme Corp");
+        Assert.assertEquals(account.getCity(), "San Francisco");
+        Assert.assertEquals(account.getStateOrProvince(), "CA");
+        Assert.assertEquals(account.getCountry(), "USA");
+        Assert.assertEquals(account.getPostalCode(), "94105");
+        Assert.assertEquals(account.getPhone(), "555-1234");
+        Assert.assertEquals(account.getNotes(), "VIP customer");
+        Assert.assertTrue(account.isMigrated());
+    }
+
+    @Test(groups = "fast", description = "Test DefaultAccount.Builder default values")
+    public void testBuilderDefaultValues() throws Exception {
+        final DefaultAccount account = DefaultAccount.builder().build();
+
+        Assert.assertNull(account.getId());
+        Assert.assertNull(account.getExternalKey());
+        Assert.assertNull(account.getEmail());
+        Assert.assertNull(account.getName());
+        Assert.assertNull(account.getCurrency());
+        Assert.assertFalse(account.isPaymentDelegatedToParent());
+        Assert.assertEquals(account.getBillCycleDayLocal(), (Integer) 0);
+        Assert.assertNull(account.getPaymentMethodId());
+        Assert.assertNull(account.getTimeZone());
+        Assert.assertNull(account.getLocale());
+        Assert.assertNull(account.isMigrated());
+    }
+
+    @Test(groups = "fast", description = "Test toBuilder for cloning and mutating account")
+    public void testBuilderToBuilderCopyAndMutation() throws Exception {
+        final DefaultAccount original = DefaultAccount.builder()
+                .id(UUID.randomUUID())
+                .name("Alice")
+                .email("alice@example.com")
+                .currency(Currency.EUR)
+                .billCycleDayLocal(10)
+                .build();
+
+        final DefaultAccount mutated = original.toBuilder()
+                .email("alice.new@example.com")
+                .billCycleDayLocal(25)
+                .build();
+
+        Assert.assertEquals(mutated.getId(), original.getId());
+        Assert.assertEquals(mutated.getName(), original.getName());
+        Assert.assertEquals(mutated.getCurrency(), original.getCurrency());
+        Assert.assertEquals(mutated.getEmail(), "alice.new@example.com");
+        Assert.assertEquals(mutated.getBillCycleDayLocal(), (Integer) 25);
+    }
+
+    @Test(groups = "fast", description = "Test equality between Builder and legacy constructor instances")
+    public void testBuilderEqualsLegacyConstructor() throws Exception {
+        final UUID id = UUID.randomUUID();
+        final String externalKey = "key-1";
+        final String email = "test@test.com";
+        final String name = "Test";
+        final Integer firstNameLength = 4;
+        final Currency currency = Currency.BRL;
+        final UUID parentAccountId = UUID.randomUUID();
+        final Boolean isPaymentDelegatedToParent = false;
+        final Integer billCycleDayLocal = 5;
+        final UUID paymentMethodId = UUID.randomUUID();
+        final DateTime referenceTime = new DateTime(DateTimeZone.UTC);
+        final DateTimeZone timeZone = DateTimeZone.UTC;
+        final String locale = "pt_BR";
+        final String address1 = "Rua A";
+        final String address2 = "Apto 1";
+        final String companyName = "Empresa";
+        final String city = "SP";
+        final String stateOrProvince = "SP";
+        final String country = "Brasil";
+        final String postalCode = "01000-000";
+        final String phone = "11999999999";
+        final String notes = "nota";
+        final Boolean isMigrated = false;
+
+        final DefaultAccount legacy = new DefaultAccount(id, null, null, externalKey, email, name,
+                firstNameLength, currency, parentAccountId, isPaymentDelegatedToParent, billCycleDayLocal,
+                paymentMethodId, referenceTime, timeZone, locale, address1, address2, companyName,
+                city, stateOrProvince, country, postalCode, phone, notes, isMigrated);
+
+        final DefaultAccount fromBuilder = DefaultAccount.builder()
+                .id(id)
+                .externalKey(externalKey)
+                .email(email)
+                .name(name)
+                .firstNameLength(firstNameLength)
+                .currency(currency)
+                .parentAccountId(parentAccountId)
+                .isPaymentDelegatedToParent(isPaymentDelegatedToParent)
+                .billCycleDayLocal(billCycleDayLocal)
+                .paymentMethodId(paymentMethodId)
+                .referenceTime(referenceTime)
+                .timeZone(timeZone)
+                .locale(locale)
+                .address1(address1)
+                .address2(address2)
+                .companyName(companyName)
+                .city(city)
+                .stateOrProvince(stateOrProvince)
+                .country(country)
+                .postalCode(postalCode)
+                .phone(phone)
+                .notes(notes)
+                .isMigrated(isMigrated)
+                .build();
+
+        Assert.assertEquals(fromBuilder, legacy);
+        Assert.assertEquals(fromBuilder.hashCode(), legacy.hashCode());
     }
 
     private void checkAccountEquals(final Account finalAccount, final Account delegateAccount) {
