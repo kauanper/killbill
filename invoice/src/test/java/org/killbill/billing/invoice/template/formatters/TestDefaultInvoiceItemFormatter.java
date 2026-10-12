@@ -122,6 +122,48 @@ public class TestDefaultInvoiceItemFormatter extends InvoiceTestSuiteNoDB {
                     "<td></td>");
     }
 
+    @Test(groups = "fast")
+    public void testCharacterizationDirectGettersAndNulls() throws Exception {
+        final ResourceBundle bundle = resourceBundleFactory.createBundle(Locale.US, config.getCatalogBundlePath(), ResourceBundleType.CATALOG_TRANSLATION, internalCallContext);
+        final ResourceBundle defaultBundle = resourceBundleFactory.createBundle(LocaleUtils.toLocale(config.getDefaultLocale()), config.getCatalogBundlePath(), ResourceBundleType.CATALOG_TRANSLATION, internalCallContext);
+
+        final InvoiceItem mockItem = org.mockito.Mockito.mock(InvoiceItem.class);
+        org.mockito.Mockito.when(mockItem.getAmount()).thenReturn(null);
+        org.mockito.Mockito.when(mockItem.getCurrency()).thenReturn(Currency.USD);
+        org.mockito.Mockito.when(mockItem.getStartDate()).thenReturn(new LocalDate(2023, 1, 1));
+        org.mockito.Mockito.when(mockItem.getEndDate()).thenReturn(null);
+        org.mockito.Mockito.when(mockItem.getPlanName()).thenReturn("plan");
+        org.mockito.Mockito.when(mockItem.getProductName()).thenReturn("product");
+        org.mockito.Mockito.when(mockItem.getDescription()).thenReturn(null);
+
+        final DefaultInvoiceItemFormatter formatter = new DefaultInvoiceItemFormatter(config.getDefaultLocale(), config.getCatalogBundlePath(), mockItem,
+                                                                                      DateTimeFormat.mediumDate().withLocale(Locale.US), Locale.US, bundle, defaultBundle);
+
+        // Characterization: null amount defaults to ZERO
+        Assert.assertEquals(formatter.getAmount(), BigDecimal.ZERO);
+        Assert.assertEquals(formatter.getCurrency(), Currency.USD);
+        Assert.assertEquals(formatter.getRate(), BigDecimal.ZERO);
+        Assert.assertNull(formatter.getLinkedItemId());
+        Assert.assertEquals(formatter.getFormattedStartDate(), "Jan 1, 2023");
+        Assert.assertNull(formatter.getFormattedEndDate());
+
+        // Translation characterization: null fields return empty string ""
+        Assert.assertEquals(formatter.getDescription(), "");
+        Assert.assertEquals(formatter.getUsageName(), "");
+        Assert.assertEquals(formatter.getPrettyUsageName(), "");
+        Assert.assertEquals(formatter.getPlanName(), "plan");
+        Assert.assertEquals(formatter.getProductName(), "product");
+
+        // matches() throws UnsupportedOperationException
+        try {
+            formatter.matches(mockItem);
+            Assert.fail("matches() should throw UnsupportedOperationException");
+        } catch (final UnsupportedOperationException e) {
+            // expected
+        }
+    }
+
+
     private void checkOutput(final InvoiceItem invoiceItem, final String template, final String expected) {
         checkOutput(invoiceItem, template, expected, Locale.US);
     }
