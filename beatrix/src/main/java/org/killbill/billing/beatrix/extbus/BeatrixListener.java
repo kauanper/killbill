@@ -18,6 +18,8 @@
 
 package org.killbill.billing.beatrix.extbus;
 
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
@@ -93,6 +95,33 @@ public class BeatrixListener {
 
     protected ObjectMapper objectMapper;
 
+    private interface SubscriptionTransitionStrategy {
+        ExtBusEventType convert(SubscriptionBaseTransitionType transitionType);
+    }
+
+    private static final Map<SubscriptionBaseTransitionType, SubscriptionTransitionStrategy> SUBSCRIPTION_TRANSITION_STRATEGIES = createSubscriptionTransitionStrategies();
+
+    private static Map<SubscriptionBaseTransitionType, SubscriptionTransitionStrategy> createSubscriptionTransitionStrategies() {
+        final Map<SubscriptionBaseTransitionType, SubscriptionTransitionStrategy> strategies = new EnumMap<>(SubscriptionBaseTransitionType.class);
+        strategies.put(SubscriptionBaseTransitionType.CREATE, transition -> ExtBusEventType.SUBSCRIPTION_CREATION);
+        strategies.put(SubscriptionBaseTransitionType.TRANSFER, transition -> ExtBusEventType.SUBSCRIPTION_CREATION);
+        strategies.put(SubscriptionBaseTransitionType.CANCEL, transition -> ExtBusEventType.SUBSCRIPTION_CANCEL);
+        strategies.put(SubscriptionBaseTransitionType.PHASE, transition -> ExtBusEventType.SUBSCRIPTION_PHASE);
+        strategies.put(SubscriptionBaseTransitionType.CHANGE, transition -> ExtBusEventType.SUBSCRIPTION_CHANGE);
+        // No external UNDO_CHANGE event exists, so preserve the historical mapping.
+        strategies.put(SubscriptionBaseTransitionType.UNDO_CHANGE, transition -> ExtBusEventType.SUBSCRIPTION_CHANGE);
+        strategies.put(SubscriptionBaseTransitionType.UNCANCEL, transition -> ExtBusEventType.SUBSCRIPTION_UNCANCEL);
+        strategies.put(SubscriptionBaseTransitionType.BCD_CHANGE, transition -> ExtBusEventType.SUBSCRIPTION_BCD_CHANGE);
+        strategies.put(SubscriptionBaseTransitionType.QUANTITY_CHANGE, transition -> ExtBusEventType.SUBSCRIPTION_QUANTITY);
+        strategies.put(SubscriptionBaseTransitionType.EXPIRED, transition -> ExtBusEventType.SUBSCRIPTION_EXPIRED);
+        return Map.copyOf(strategies);
+    }
+
+    static ExtBusEventType mapSubscriptionTransitionType(final SubscriptionBaseTransitionType transitionType) {
+        final SubscriptionTransitionStrategy strategy = SUBSCRIPTION_TRANSITION_STRATEGIES.get(transitionType);
+        return strategy == null ? null : strategy.convert(transitionType);
+    }
+
     @Inject
     public BeatrixListener(@Named(BusModule.EXTERNAL_BUS_NAMED) final PersistentBus externalBus,
                            final InternalCallContextFactory internalCallContextFactory) {
@@ -127,61 +156,103 @@ public class BeatrixListener {
         }
     }
 
+    private static final class ConvertedEvent {
+        private final ObjectType objectType; private final UUID objectId; private final ExtBusEventType eventBusType; private final String metaData; private final UUID accountId;
+        private ConvertedEvent(final ObjectType objectType, final UUID objectId, final ExtBusEventType eventBusType, final String metaData, final UUID accountId) {
+            this.objectType = objectType; this.objectId = objectId; this.eventBusType = eventBusType; this.metaData = metaData; this.accountId = accountId;
+        }
+    }
+    private interface InternalEventConversionStrategy { ConvertedEvent convert(BusInternalEvent event, InternalCallContext context) throws JsonProcessingException; }
+    private final Map<BusInternalEventType, InternalEventConversionStrategy> internalEventStrategies = createInternalEventStrategies();
+    private Map<BusInternalEventType, InternalEventConversionStrategy> createInternalEventStrategies() {
+        final Map<BusInternalEventType, InternalEventConversionStrategy> strategies = new EnumMap<>(BusInternalEventType.class);
+        strategies.put(BusInternalEventType.ACCOUNT_CREATE, (event, context) -> convertAccountCreate(event));
+        strategies.put(BusInternalEventType.ACCOUNT_CHANGE, (event, context) -> convertAccountChange(event));
+        strategies.put(BusInternalEventType.SUBSCRIPTION_TRANSITION, (event, context) -> convertSubscriptionTransition(event));
+        strategies.put(BusInternalEventType.BLOCKING_STATE, (event, context) -> convertBlockingState(event));
+        strategies.put(BusInternalEventType.INVOICE_CREATION, (event, context) -> convertInvoiceCreation(event));
+        strategies.put(BusInternalEventType.INVOICE_NOTIFICATION, (event, context) -> convertInvoiceNotification(event));
+        strategies.put(BusInternalEventType.INVOICE_ADJUSTMENT, (event, context) -> convertInvoiceAdjustment(event));
+        strategies.put(BusInternalEventType.INVOICE_PAYMENT_INFO, (event, context) -> convertInvoicePaymentInfo(event));
+        strategies.put(BusInternalEventType.INVOICE_PAYMENT_ERROR, (event, context) -> convertInvoicePaymentError(event));
+        strategies.put(BusInternalEventType.PAYMENT_INFO, (event, context) -> convertPaymentInfo(event));
+        strategies.put(BusInternalEventType.PAYMENT_ERROR, (event, context) -> convertPaymentError(event));
+        strategies.put(BusInternalEventType.PAYMENT_PLUGIN_ERROR, (event, context) -> convertPaymentPluginError(event));
+        strategies.put(BusInternalEventType.OVERDUE_CHANGE, (event, context) -> convertOverdueChange(event));
+        strategies.put(BusInternalEventType.USER_TAG_CREATION, (event, context) -> convertUserTagCreation(event));
+        strategies.put(BusInternalEventType.CONTROL_TAG_CREATION, (event, context) -> convertControlTagCreation(event));
+        strategies.put(BusInternalEventType.USER_TAG_DELETION, (event, context) -> convertUserTagDeletion(event));
+        strategies.put(BusInternalEventType.CONTROL_TAG_DELETION, (event, context) -> convertControlTagDeletion(event));
+        strategies.put(BusInternalEventType.CUSTOM_FIELD_CREATION, (event, context) -> convertCustomFieldCreation(event));
+        strategies.put(BusInternalEventType.CUSTOM_FIELD_DELETION, (event, context) -> convertCustomFieldDeletion(event));
+        strategies.put(BusInternalEventType.TENANT_CONFIG_CHANGE, (event, context) -> convertTenantConfigChange(event));
+        strategies.put(BusInternalEventType.TENANT_CONFIG_DELETION, (event, context) -> convertTenantConfigDeletion(event));
+        strategies.put(BusInternalEventType.BROADCAST_SERVICE, (event, context) -> convertBroadcastService(event));
+        return Map.copyOf(strategies);
+    }
     private BusEvent computeExtBusEventEntryFromBusInternalEvent(final BusInternalEvent event, final InternalCallContext context) throws JsonProcessingException {
+        final InternalEventConversionStrategy strategy = internalEventStrategies.get(event.getBusEventType());
+        final ConvertedEvent convertedEvent = strategy == null ? null : strategy.convert(event, context);
+        if (convertedEvent == null || convertedEvent.eventBusType == null) return null;
+        final TenantContext tenantContext = internalCallContextFactory.createTenantContext(context);
+        final UUID accountId = convertedEvent.accountId == null ? getAccountId(event.getBusEventType(), convertedEvent.objectId, convertedEvent.objectType, tenantContext) : convertedEvent.accountId;
+        return new DefaultBusExternalEvent(convertedEvent.objectId, convertedEvent.objectType, convertedEvent.eventBusType, accountId, tenantContext.getTenantId(), convertedEvent.metaData, context.getAccountRecordId(), context.getTenantRecordId(), context.getUserToken());
+    }
+
+    private ConvertedEvent convertAccountCreate(final BusInternalEvent event) throws JsonProcessingException {
         ObjectType objectType = null;
         UUID objectId = null;
         ExtBusEventType eventBusType = null;
         String metaData = null;
-
         UUID accountId = null;
-        switch (event.getBusEventType()) {
-            case ACCOUNT_CREATE:
+
                 final AccountCreationInternalEvent realEventACR = (AccountCreationInternalEvent) event;
                 objectType = ObjectType.ACCOUNT;
                 objectId = realEventACR.getId();
                 eventBusType = ExtBusEventType.ACCOUNT_CREATION;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case ACCOUNT_CHANGE:
+    private ConvertedEvent convertAccountChange(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final AccountChangeInternalEvent realEventACH = (AccountChangeInternalEvent) event;
                 objectType = ObjectType.ACCOUNT;
                 objectId = realEventACH.getAccountId();
                 eventBusType = ExtBusEventType.ACCOUNT_CHANGE;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case SUBSCRIPTION_TRANSITION:
+    private ConvertedEvent convertSubscriptionTransition(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final SubscriptionInternalEvent realEventST = (SubscriptionInternalEvent) event;
                 objectType = ObjectType.SUBSCRIPTION;
                 objectId = realEventST.getSubscriptionId();
-                if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.CREATE ||
-                    realEventST.getTransitionType() == SubscriptionBaseTransitionType.TRANSFER) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_CREATION;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.CANCEL) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_CANCEL;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.PHASE) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_PHASE;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.CHANGE) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_CHANGE;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.UNDO_CHANGE) {
-                    // We map UNDO_CHANGE as a SUBSCRIPTION_CHANGE as we don't have such ext event
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_CHANGE;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.UNCANCEL) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_UNCANCEL;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.BCD_CHANGE) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_BCD_CHANGE;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.QUANTITY_CHANGE) {
-                    eventBusType = ExtBusEventType.SUBSCRIPTION_QUANTITY;
-                } else if (realEventST.getTransitionType() == SubscriptionBaseTransitionType.EXPIRED) {
-                	eventBusType = ExtBusEventType.SUBSCRIPTION_EXPIRED;
-                }
+                eventBusType = mapSubscriptionTransitionType(realEventST.getTransitionType());
 
                 SubscriptionMetadata.ActionType actionType = (event instanceof EffectiveSubscriptionInternalEvent) ? ActionType.EFFECTIVE : ActionType.REQUESTED;
                 final boolean isSubscriptionUndo = realEventST.getTransitionType() == SubscriptionBaseTransitionType.UNDO_CHANGE ? true : false;
                 final SubscriptionMetadata subscriptionMetadataObj = new SubscriptionMetadata(actionType, realEventST.getBundleExternalKey(), isSubscriptionUndo);
                 metaData = objectMapper.writeValueAsString(subscriptionMetadataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case BLOCKING_STATE:
+    private ConvertedEvent convertBlockingState(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final BlockingTransitionInternalEvent realEventBS = (BlockingTransitionInternalEvent) event;
                 if (realEventBS.getBlockingType() == BlockingStateType.ACCOUNT) {
                     objectType = ObjectType.ACCOUNT;
@@ -210,16 +281,30 @@ public class BeatrixListener {
                                                                                         realEventBS.isTransitionedToBlockedEntitlement(), realEventBS.isTransitionedToUnblockedEntitlement());
                     metaData = objectMapper.writeValueAsString(blockingStateMetadata);
                 }
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case INVOICE_CREATION:
+    private ConvertedEvent convertInvoiceCreation(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final InvoiceCreationInternalEvent realEventInv = (InvoiceCreationInternalEvent) event;
                 objectType = ObjectType.INVOICE;
                 objectId = realEventInv.getInvoiceId();
                 eventBusType = ExtBusEventType.INVOICE_CREATION;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case INVOICE_NOTIFICATION:
+    private ConvertedEvent convertInvoiceNotification(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final InvoiceNotificationInternalEvent realEventInvNotification = (InvoiceNotificationInternalEvent) event;
                 objectType = ObjectType.INVOICE;
                 objectId = null;
@@ -230,44 +315,78 @@ public class BeatrixListener {
                                                                                                 realEventInvNotification.getAmountOwed(),
                                                                                                 realEventInvNotification.getCurrency());
                 metaData = objectMapper.writeValueAsString(invoiceNotificationMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
+    private ConvertedEvent convertInvoiceAdjustment(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
 
-            case INVOICE_ADJUSTMENT:
                 final InvoiceAdjustmentInternalEvent realEventInvAdj = (InvoiceAdjustmentInternalEvent) event;
                 objectType = ObjectType.INVOICE;
                 objectId = realEventInvAdj.getInvoiceId();
                 eventBusType = ExtBusEventType.INVOICE_ADJUSTMENT;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case INVOICE_PAYMENT_INFO:
+    private ConvertedEvent convertInvoicePaymentInfo(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final InvoicePaymentInfoInternalEvent realEventInvPay = (InvoicePaymentInfoInternalEvent) event;
                 objectType = ObjectType.INVOICE;
                 objectId = realEventInvPay.getInvoiceId();
                 eventBusType = ExtBusEventType.INVOICE_PAYMENT_SUCCESS;
                 final InvoicePaymentMetadata invoicePaymentInfoMetaDataObj = new InvoicePaymentMetadata(realEventInvPay.getPaymentId(), realEventInvPay.getPaymentAttemptId(), realEventInvPay.getType(), realEventInvPay.getPaymentDate(), realEventInvPay.getAmount(), realEventInvPay.getCurrency(), realEventInvPay.getLinkedInvoicePaymentId(), realEventInvPay.getPaymentCookieId(), realEventInvPay.getProcessedCurrency());
                 metaData = objectMapper.writeValueAsString(invoicePaymentInfoMetaDataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case INVOICE_PAYMENT_ERROR:
+    private ConvertedEvent convertInvoicePaymentError(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final InvoicePaymentErrorInternalEvent realEventInvPayErr = (InvoicePaymentErrorInternalEvent) event;
                 objectType = ObjectType.INVOICE;
                 objectId = realEventInvPayErr.getInvoiceId();
                 eventBusType = ExtBusEventType.INVOICE_PAYMENT_FAILED;
                 final InvoicePaymentMetadata invoicePaymentErrorMetaDataObj = new InvoicePaymentMetadata(realEventInvPayErr.getPaymentId(), realEventInvPayErr.getPaymentAttemptId(), realEventInvPayErr.getType(), realEventInvPayErr.getPaymentDate(), realEventInvPayErr.getAmount(), realEventInvPayErr.getCurrency(), realEventInvPayErr.getLinkedInvoicePaymentId(), realEventInvPayErr.getPaymentCookieId(), realEventInvPayErr.getProcessedCurrency());
                 metaData = objectMapper.writeValueAsString(invoicePaymentErrorMetaDataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case PAYMENT_INFO:
+    private ConvertedEvent convertPaymentInfo(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final PaymentInfoInternalEvent realEventPay = (PaymentInfoInternalEvent) event;
                 objectType = ObjectType.PAYMENT;
                 objectId = realEventPay.getPaymentId();
                 eventBusType = ExtBusEventType.PAYMENT_SUCCESS;
                 final PaymentMetadata paymentInfoMetaDataObj = new PaymentMetadata(realEventPay.getPaymentTransactionId(), realEventPay.getAmount(), realEventPay.getCurrency(), realEventPay.getStatus(), realEventPay.getTransactionType(), realEventPay.getEffectiveDate());
                 metaData = objectMapper.writeValueAsString(paymentInfoMetaDataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case PAYMENT_ERROR:
+    private ConvertedEvent convertPaymentError(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final PaymentErrorInternalEvent realEventPayErr = (PaymentErrorInternalEvent) event;
                 objectType = ObjectType.PAYMENT;
                 objectId = realEventPayErr.getPaymentId();
@@ -275,115 +394,178 @@ public class BeatrixListener {
                 accountId = realEventPayErr.getAccountId();
                 final PaymentMetadata paymentErrorMetaDataObj = new PaymentMetadata(realEventPayErr.getPaymentTransactionId(), realEventPayErr.getAmount(), realEventPayErr.getCurrency(), realEventPayErr.getStatus(), realEventPayErr.getTransactionType(), realEventPayErr.getEffectiveDate());
                 metaData = objectMapper.writeValueAsString(paymentErrorMetaDataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case PAYMENT_PLUGIN_ERROR:
+    private ConvertedEvent convertPaymentPluginError(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final PaymentPluginErrorInternalEvent realEventPayPluginErr = (PaymentPluginErrorInternalEvent) event;
                 objectType = ObjectType.PAYMENT;
                 objectId = realEventPayPluginErr.getPaymentId();
                 eventBusType = ExtBusEventType.PAYMENT_FAILED;
                 final PaymentMetadata pluginErrorMetaDataObj = new PaymentMetadata(realEventPayPluginErr.getPaymentTransactionId(), realEventPayPluginErr.getAmount(), realEventPayPluginErr.getCurrency(), realEventPayPluginErr.getStatus(), realEventPayPluginErr.getTransactionType(), realEventPayPluginErr.getEffectiveDate());
                 metaData = objectMapper.writeValueAsString(pluginErrorMetaDataObj);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case OVERDUE_CHANGE:
+    private ConvertedEvent convertOverdueChange(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final OverdueChangeInternalEvent realEventOC = (OverdueChangeInternalEvent) event;
                 objectType = ObjectType.ACCOUNT;
                 objectId = realEventOC.getOverdueObjectId();
                 eventBusType = ExtBusEventType.OVERDUE_CHANGE;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case USER_TAG_CREATION:
+    private ConvertedEvent convertUserTagCreation(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final UserTagCreationInternalEvent realUserTagEventCr = (UserTagCreationInternalEvent) event;
                 objectType = ObjectType.TAG;
                 objectId = realUserTagEventCr.getTagId();
                 eventBusType = ExtBusEventType.TAG_CREATION;
                 final TagMetadata userTagCreationMetadata = new TagMetadata(realUserTagEventCr.getTagDefinition().getName());
                 metaData = objectMapper.writeValueAsString(userTagCreationMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case CONTROL_TAG_CREATION:
+    private ConvertedEvent convertControlTagCreation(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final ControlTagCreationInternalEvent realTagEventCr = (ControlTagCreationInternalEvent) event;
                 objectType = ObjectType.TAG;
                 objectId = realTagEventCr.getTagId();
                 eventBusType = ExtBusEventType.TAG_CREATION;
                 final TagMetadata controlTagCreationMetadata = new TagMetadata(realTagEventCr.getTagDefinition().getName());
                 metaData = objectMapper.writeValueAsString(controlTagCreationMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case USER_TAG_DELETION:
+    private ConvertedEvent convertUserTagDeletion(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final UserTagDeletionInternalEvent realUserTagEventDel = (UserTagDeletionInternalEvent) event;
                 objectType = ObjectType.TAG;
                 objectId = realUserTagEventDel.getTagId();
                 eventBusType = ExtBusEventType.TAG_DELETION;
                 final TagMetadata userTagDeletionMetadata = new TagMetadata(realUserTagEventDel.getTagDefinition().getName());
                 metaData = objectMapper.writeValueAsString(userTagDeletionMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case CONTROL_TAG_DELETION:
+    private ConvertedEvent convertControlTagDeletion(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final ControlTagDeletionInternalEvent realTagEventDel = (ControlTagDeletionInternalEvent) event;
                 objectType = ObjectType.TAG;
                 objectId = realTagEventDel.getTagId();
                 eventBusType = ExtBusEventType.TAG_DELETION;
                 final TagMetadata controlTagDeletionMetadata = new TagMetadata(realTagEventDel.getTagDefinition().getName());
                 metaData = objectMapper.writeValueAsString(controlTagDeletionMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case CUSTOM_FIELD_CREATION:
+    private ConvertedEvent convertCustomFieldCreation(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final CustomFieldCreationEvent realCustomFieldEventCr = (CustomFieldCreationEvent) event;
                 objectType = ObjectType.CUSTOM_FIELD;
                 objectId = realCustomFieldEventCr.getCustomFieldId();
                 eventBusType = ExtBusEventType.CUSTOM_FIELD_CREATION;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case CUSTOM_FIELD_DELETION:
+    private ConvertedEvent convertCustomFieldDeletion(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final CustomFieldDeletionEvent realCustomFieldEventDel = (CustomFieldDeletionEvent) event;
                 objectType = ObjectType.CUSTOM_FIELD;
                 objectId = realCustomFieldEventDel.getCustomFieldId();
                 eventBusType = ExtBusEventType.CUSTOM_FIELD_DELETION;
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case TENANT_CONFIG_CHANGE:
+    private ConvertedEvent convertTenantConfigChange(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final TenantConfigChangeInternalEvent realTenantConfigEventChg = (TenantConfigChangeInternalEvent) event;
                 objectType = ObjectType.TENANT_KVS;
                 objectId = realTenantConfigEventChg.getId();
                 eventBusType = ExtBusEventType.TENANT_CONFIG_CHANGE;
                 final TenantConfigMetadata tenantConfigChangeMetadata = new TenantConfigMetadata(realTenantConfigEventChg.getKey());
                 metaData = objectMapper.writeValueAsString(tenantConfigChangeMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case TENANT_CONFIG_DELETION:
+    private ConvertedEvent convertTenantConfigDeletion(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final TenantConfigDeletionInternalEvent realTenantConfigEventDel = (TenantConfigDeletionInternalEvent) event;
                 objectType = ObjectType.TENANT_KVS;
                 objectId = null;
                 eventBusType = ExtBusEventType.TENANT_CONFIG_DELETION;
                 final TenantConfigMetadata tenantConfigDeletionMetadata = new TenantConfigMetadata(realTenantConfigEventDel.getKey());
                 metaData = objectMapper.writeValueAsString(tenantConfigDeletionMetadata);
-                break;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
+    }
 
-            case BROADCAST_SERVICE:
+    private ConvertedEvent convertBroadcastService(final BusInternalEvent event) throws JsonProcessingException {
+        ObjectType objectType = null;
+        UUID objectId = null;
+        ExtBusEventType eventBusType = null;
+        String metaData = null;
+        UUID accountId = null;
+
                 final BroadcastInternalEvent realBroadcastEvent = (BroadcastInternalEvent) event;
                 objectType = ObjectType.SERVICE_BROADCAST;
                 objectId = null;
                 eventBusType = ExtBusEventType.BROADCAST_SERVICE;
                 final BroadcastMetadata broadcastMetadata = new BroadcastMetadata(realBroadcastEvent.getServiceName(), realBroadcastEvent.getType(), realBroadcastEvent.getJsonEvent());
                 metaData = objectMapper.writeValueAsString(broadcastMetadata);
-                break;
-
-            default:
-        }
-
-        final TenantContext tenantContext = internalCallContextFactory.createTenantContext(context);
-        // See #275
-        accountId = (accountId == null) ?
-                    getAccountId(event.getBusEventType(), objectId, objectType, tenantContext) :
-                    accountId;
-
-        return eventBusType != null ?
-               new DefaultBusExternalEvent(objectId, objectType, eventBusType, accountId, tenantContext.getTenantId(), metaData, context.getAccountRecordId(), context.getTenantRecordId(), context.getUserToken()) :
-               null;
+        return new ConvertedEvent(objectType, objectId, eventBusType, metaData, accountId);
     }
-
     private UUID getAccountId(final BusInternalEventType eventType, @Nullable final UUID objectId, final ObjectType objectType, final TenantContext context) {
         // accountRecord_id is not set for ACCOUNT_CREATE event as we are in the transaction and value is known yet
         if (eventType == BusInternalEventType.ACCOUNT_CREATE) {

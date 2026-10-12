@@ -85,6 +85,11 @@ public class TestVersionedCatalogLoader extends CatalogTestSuiteNoDB {
     }
 
     @Test(groups = "fast")
+    public void testExtractHrefsWithMixedCaseAndSingleQuotes() {
+        Assert.assertEquals(loader.extractHrefs("<a HREF='one.xml'>one</a><a HrEf=\"two.xml\">two</a>"), List.of("one.xml", "two.xml"));
+    }
+
+    @Test(groups = "fast")
     public void testFindXmlUrlReferences() throws MalformedURLException, URISyntaxException {
         final String page = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\">" +
                             "<html>" +

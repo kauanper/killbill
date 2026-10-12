@@ -185,38 +185,7 @@ public class VersionedCatalogLoader implements CatalogLoader, Closeable {
     }
 
     protected List<String> extractHrefs(final String directoryContents) {
-        final List<String> results = new ArrayList<String>();
-        int start = 0;
-        int end = 0;
-        final String HREF_SEARCH_END = "\"";
-        final String HREF_LOW_START = "href=\"";
-        while (start >= 0) {
-            start = directoryContents.indexOf(HREF_LOW_START, end);
-            if (start > 0) {
-                start = start + HREF_LOW_START.length();
-            }
-
-            end = directoryContents.indexOf(HREF_SEARCH_END, start);
-            if (start >= 0) { // We found something
-                results.add(directoryContents.substring(start, end));
-            }
-        }
-
-        start = 0;
-        end = 0;
-        while (start >= 0) {
-            final String HREF_CAPS_START = "HREF=\"";
-            start = directoryContents.indexOf(HREF_CAPS_START, end);
-            if (start > 0) {
-                start = +HREF_LOW_START.length();
-            }
-
-            end = directoryContents.indexOf(HREF_SEARCH_END, start);
-            if (start >= 0) { // We found something
-                results.add(directoryContents.substring(start, end));
-            }
-        }
-        return results;
+        return new HtmlDirectoryListingAdapter().extractHrefs(directoryContents);
     }
 
     protected List<URI> findXmlFileReferences(final String directoryContents, final URL url) throws URISyntaxException {
