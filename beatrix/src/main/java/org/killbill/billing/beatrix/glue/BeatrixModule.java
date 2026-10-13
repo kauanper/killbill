@@ -21,8 +21,33 @@ package org.killbill.billing.beatrix.glue;
 import org.killbill.billing.beatrix.DefaultBeatrixService;
 import org.killbill.billing.beatrix.bus.api.BeatrixService;
 import org.killbill.billing.beatrix.extbus.BeatrixListener;
+import org.killbill.billing.beatrix.extbus.strategy.AccountChangeEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.AccountCreateEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.BlockingStateEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.BroadcastServiceEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.ControlTagCreationEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.ControlTagDeletionEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.CustomFieldCreationEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.CustomFieldDeletionEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InternalEventConversionStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InvoiceAdjustmentEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InvoiceCreationEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InvoiceNotificationEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InvoicePaymentErrorEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.InvoicePaymentInfoEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.OverdueChangeEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.PaymentErrorEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.PaymentInfoEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.PaymentPluginErrorEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.SubscriptionTransitionEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.TenantConfigChangeEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.TenantConfigDeletionEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.UserTagCreationEventStrategy;
+import org.killbill.billing.beatrix.extbus.strategy.UserTagDeletionEventStrategy;
 import org.killbill.billing.platform.api.KillbillConfigSource;
 import org.killbill.billing.util.glue.KillBillModule;
+
+import com.google.inject.multibindings.Multibinder;
 
 public class BeatrixModule extends KillBillModule {
 
@@ -33,6 +58,33 @@ public class BeatrixModule extends KillBillModule {
     @Override
     protected void configure() {
         installExternalBus();
+        bindEventConversionStrategies();
+    }
+
+    private void bindEventConversionStrategies() {
+        final Multibinder<InternalEventConversionStrategy> strategies = Multibinder.newSetBinder(binder(), InternalEventConversionStrategy.class);
+        strategies.addBinding().to(AccountCreateEventStrategy.class);
+        strategies.addBinding().to(AccountChangeEventStrategy.class);
+        strategies.addBinding().to(SubscriptionTransitionEventStrategy.class);
+        strategies.addBinding().to(BlockingStateEventStrategy.class);
+        strategies.addBinding().to(InvoiceCreationEventStrategy.class);
+        strategies.addBinding().to(InvoiceNotificationEventStrategy.class);
+        strategies.addBinding().to(InvoiceAdjustmentEventStrategy.class);
+        strategies.addBinding().to(InvoicePaymentInfoEventStrategy.class);
+        strategies.addBinding().to(InvoicePaymentErrorEventStrategy.class);
+        strategies.addBinding().to(PaymentInfoEventStrategy.class);
+        strategies.addBinding().to(PaymentErrorEventStrategy.class);
+        strategies.addBinding().to(PaymentPluginErrorEventStrategy.class);
+        strategies.addBinding().to(OverdueChangeEventStrategy.class);
+        strategies.addBinding().to(UserTagCreationEventStrategy.class);
+        strategies.addBinding().to(ControlTagCreationEventStrategy.class);
+        strategies.addBinding().to(UserTagDeletionEventStrategy.class);
+        strategies.addBinding().to(ControlTagDeletionEventStrategy.class);
+        strategies.addBinding().to(CustomFieldCreationEventStrategy.class);
+        strategies.addBinding().to(CustomFieldDeletionEventStrategy.class);
+        strategies.addBinding().to(TenantConfigChangeEventStrategy.class);
+        strategies.addBinding().to(TenantConfigDeletionEventStrategy.class);
+        strategies.addBinding().to(BroadcastServiceEventStrategy.class);
     }
 
     protected void installExternalBus() {

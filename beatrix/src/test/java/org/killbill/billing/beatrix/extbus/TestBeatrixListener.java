@@ -58,6 +58,7 @@ import org.killbill.billing.notification.plugin.api.TenantConfigMetadata;
 import org.killbill.billing.payment.api.TransactionStatus;
 import org.killbill.billing.payment.api.TransactionType;
 import org.killbill.billing.subscription.api.SubscriptionBaseTransitionType;
+import org.killbill.billing.beatrix.extbus.strategy.SubscriptionTransitionTypeStrategy;
 import org.killbill.billing.util.callcontext.CallOrigin;
 import org.killbill.billing.util.callcontext.InternalCallContextFactory;
 import org.killbill.billing.util.callcontext.TenantContext;
@@ -118,9 +119,9 @@ public class TestBeatrixListener {
 
     @Test(groups = "fast")
     public void testSubscriptionTransitionStrategies() {
-        assertEquals(BeatrixListener.mapSubscriptionTransitionType(SubscriptionBaseTransitionType.CREATE), ExtBusEventType.SUBSCRIPTION_CREATION);
-        assertEquals(BeatrixListener.mapSubscriptionTransitionType(SubscriptionBaseTransitionType.UNDO_CHANGE), ExtBusEventType.SUBSCRIPTION_CHANGE);
-        assertEquals(BeatrixListener.mapSubscriptionTransitionType(SubscriptionBaseTransitionType.EXPIRED), ExtBusEventType.SUBSCRIPTION_EXPIRED);
+        assertEquals(SubscriptionTransitionTypeStrategy.mapTransitionType(SubscriptionBaseTransitionType.CREATE), ExtBusEventType.SUBSCRIPTION_CREATION);
+        assertEquals(SubscriptionTransitionTypeStrategy.mapTransitionType(SubscriptionBaseTransitionType.UNDO_CHANGE), ExtBusEventType.SUBSCRIPTION_CHANGE);
+        assertEquals(SubscriptionTransitionTypeStrategy.mapTransitionType(SubscriptionBaseTransitionType.EXPIRED), ExtBusEventType.SUBSCRIPTION_EXPIRED);
     }
 
     @BeforeMethod(groups = "fast")
