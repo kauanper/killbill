@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Adapts an HTML directory listing to the ordered list of href references expected by the catalog loader. */
-final class HtmlDirectoryListingAdapter {
+/** Parses an HTML directory listing and extracts its href references in order. */
+final class HtmlDirectoryListingParser {
 
     private static final Pattern HREF = Pattern.compile("\\bhref\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", Pattern.CASE_INSENSITIVE);
 

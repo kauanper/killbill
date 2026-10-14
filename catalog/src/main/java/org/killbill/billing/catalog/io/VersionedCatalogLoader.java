@@ -185,7 +185,7 @@ public class VersionedCatalogLoader implements CatalogLoader, Closeable {
     }
 
     protected List<String> extractHrefs(final String directoryContents) {
-        return new HtmlDirectoryListingAdapter().extractHrefs(directoryContents);
+        return new HtmlDirectoryListingParser().extractHrefs(directoryContents);
     }
 
     protected List<URI> findXmlFileReferences(final String directoryContents, final URL url) throws URISyntaxException {
